@@ -80,8 +80,56 @@ function findSessionsArray(obj: Record<string, unknown>): unknown[] | null {
   return null;
 }
 
+let playerStatesLogged = false;
+
+// Sync authoritative building/VP counts from playerStates in diffs
+function syncPlayerStates(diff: Record<string, unknown>, state: GameState): boolean {
+  const playerStates = diff.playerStates as Record<string, unknown> | undefined;
+  if (!playerStates || typeof playerStates !== "object") return false;
+
+  if (!playerStatesLogged) {
+    console.log("[catan-companion] playerStates structure:", JSON.stringify(playerStates, null, 2));
+    playerStatesLogged = true;
+  }
+
+  let synced = false;
+  for (const [colorStr, val] of Object.entries(playerStates)) {
+    const ps = val as Record<string, unknown> | undefined;
+    if (!ps || typeof ps !== "object") continue;
+
+    const color = parseInt(colorStr);
+    if (isNaN(color)) continue;
+
+    const name = getPlayerName(color);
+    if (name.startsWith("Player ")) continue; // unknown player
+
+    const player = state.players.get(name);
+    if (!player) continue;
+
+    // Try to read victoryPointsState for authoritative counts
+    const vpState = ps.victoryPointsState as Record<string, unknown> | undefined;
+    if (vpState && typeof vpState === "object") {
+      // colonist uses addressVictoryPoints for settlements and
+      // upgradeVictoryPoints for cities (each city = 2 VP, so cities = value / 2)
+      if (typeof vpState.addressVictoryPoints === "number") {
+        player.settlements = vpState.addressVictoryPoints;
+      }
+      if (typeof vpState.upgradeVictoryPoints === "number") {
+        player.cities = vpState.upgradeVictoryPoints / 2;
+      }
+      if (typeof vpState.victoryPointDevelopmentCards === "number") {
+        player.vpCards = vpState.victoryPointDevelopmentCards;
+      }
+      synced = true;
+      console.log(`[catan-companion] playerStates sync: ${name} -> ${JSON.stringify(vpState)}`);
+    }
+  }
+  return synced;
+}
+
 // Parse type:91 game state diffs for game events
-function parseDiffEvents(diff: Record<string, unknown>): GameEvent[] {
+// When skipBuilds is true, playerStates already synced building counts
+function parseDiffEvents(diff: Record<string, unknown>, skipBuilds = false): GameEvent[] {
   const events: GameEvent[] = [];
 
   // Parse gameLogState entries
@@ -113,7 +161,8 @@ function parseDiffEvents(diff: Record<string, unknown>): GameEvent[] {
       }
 
       // Piece placed: type 4 (setup) or type 5 (mid-game build)
-      if ((logType === 4 || logType === 5) && playerColor) {
+      // Skip if playerStates already synced authoritative counts
+      if (!skipBuilds && (logType === 4 || logType === 5) && playerColor) {
         const pieceEnum = text.pieceEnum as number | undefined;
         if (pieceEnum === 2) {
           events.push({
@@ -131,7 +180,7 @@ function parseDiffEvents(diff: Record<string, unknown>): GameEvent[] {
       }
 
       // VP card: type 23 (dev card VP reveal)
-      if (logType === 23 && playerColor) {
+      if (!skipBuilds && logType === 23 && playerColor) {
         events.push({
           type: "vp_card",
           player: getPlayerName(playerColor),
@@ -193,7 +242,10 @@ export function parseWsMessage(raw: string, state?: GameState): GameEvent[] {
         if (payload && typeof payload === "object") {
           const diff = payload.diff as Record<string, unknown> | undefined;
           if (diff && typeof diff === "object") {
-            const diffEvents = parseDiffEvents(diff);
+            // If playerStates is present, use it as ground truth for
+            // buildings/VP and skip incremental built events from this diff
+            const hasPlayerStates = state && syncPlayerStates(diff, state);
+            const diffEvents = parseDiffEvents(diff, hasPlayerStates ?? false);
             events.push(...diffEvents);
           }
         }
