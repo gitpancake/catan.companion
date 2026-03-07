@@ -62,8 +62,22 @@ export function applyEvent(state: GameState, event: GameEvent): void {
       break;
     }
 
+    case "lost_longest_road": {
+      if (state.longestRoadPlayer === event.player) {
+        state.longestRoadPlayer = null;
+      }
+      break;
+    }
+
     case "largest_army": {
       state.largestArmyPlayer = event.player;
+      break;
+    }
+
+    case "lost_largest_army": {
+      if (state.largestArmyPlayer === event.player) {
+        state.largestArmyPlayer = null;
+      }
       break;
     }
   }

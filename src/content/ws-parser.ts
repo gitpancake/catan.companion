@@ -31,8 +31,12 @@ function tryParseSessionsSnapshot(data: unknown, state: GameState): boolean {
     const s = sessions[i] as Record<string, unknown> | null;
     if (!s || typeof s !== "object") continue;
 
-    // playerColor is 1-indexed (first session = color 1)
-    const color = i + 1;
+    // Use the session's actual color field if available, fall back to index+1
+    const color =
+      (typeof s.selectedColor === "number" ? s.selectedColor : null) ??
+      (typeof s.playerColor === "number" ? s.playerColor : null) ??
+      (typeof s.color === "number" ? s.color : null) ??
+      i + 1;
 
     const username = (s.username as string | undefined) || (s.isBot ? `Bot ${color}` : null);
     if (!username) continue;
@@ -141,9 +145,9 @@ function parseDiffEvents(diff: Record<string, unknown>): GameEvent[] {
   if (lrState && typeof lrState === "object") {
     for (const [colorStr, val] of Object.entries(lrState)) {
       const v = val as Record<string, unknown> | undefined;
-      if (v && typeof v === "object" && typeof v.hasLongestRoad === "boolean" && v.hasLongestRoad) {
+      if (v && typeof v === "object" && typeof v.hasLongestRoad === "boolean") {
         events.push({
-          type: "longest_road",
+          type: v.hasLongestRoad ? "longest_road" : "lost_longest_road",
           player: getPlayerName(parseInt(colorStr)),
         });
       }
@@ -155,9 +159,9 @@ function parseDiffEvents(diff: Record<string, unknown>): GameEvent[] {
   if (laState && typeof laState === "object") {
     for (const [colorStr, val] of Object.entries(laState)) {
       const v = val as Record<string, unknown> | undefined;
-      if (v && typeof v === "object" && typeof v.hasLargestArmy === "boolean" && v.hasLargestArmy) {
+      if (v && typeof v === "object" && typeof v.hasLargestArmy === "boolean") {
         events.push({
-          type: "largest_army",
+          type: v.hasLargestArmy ? "largest_army" : "lost_largest_army",
           player: getPlayerName(parseInt(colorStr)),
         });
       }

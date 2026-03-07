@@ -21,5 +21,7 @@ export type GameEvent =
   | { type: "built"; player: string; building: "settlement" | "city" }
   | { type: "vp_card"; player: string }
   | { type: "longest_road"; player: string }
+  | { type: "lost_longest_road"; player: string }
   | { type: "largest_army"; player: string }
+  | { type: "lost_largest_army"; player: string }
   | { type: "unknown"; text: string };
