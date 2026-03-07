@@ -7,9 +7,9 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA09k8VXsk6i0XzGaGgMGsNB2wEQmnSfts",
-  authDomain: "henry-auth-bcd1d.firebaseapp.com",
-  projectId: "henry-auth-bcd1d",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
 };
 
 let _app: FirebaseApp | null = null;

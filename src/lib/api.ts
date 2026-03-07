@@ -1,6 +1,6 @@
 import { getStoredToken } from "./storage";
 
-const BASE_URL = "https://catan.henrypye.xyz";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 async function apiFetch(path: string, token?: string, init?: RequestInit) {
   const authToken = token ?? (await getStoredToken());
