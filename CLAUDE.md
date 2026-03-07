@@ -38,14 +38,14 @@ Content scripts **cannot load ES module chunks**. Any shared code used by `conte
 WebSocket messages are msgpack-encoded. The interceptor decodes them and forwards as JSON via `window.postMessage`.
 
 Key message types:
-- **Sessions array**: `sessions[]` maps array index (0-based) to player info. `playerColor` in events = index + 1
+- **Sessions array**: `sessions[]` maps to player info. Color is read from `selectedColor`, `playerColor`, or `color` fields on each session object (falls back to index + 1)
 - **type:91 diffs**: `data.payload.diff` contains `gameLogState` entries:
   - `text.type:4` — Setup phase placement (pieceEnum: 0=road, 2=settlement, 3=city)
   - `text.type:5` — Mid-game build (same pieceEnum values, also has `isVp` flag)
   - `text.type:10` — Dice roll (`firstDice`, `secondDice`, `playerColor`)
   - `text.type:23` — VP card reveal
   - `text.type:45` — Game winner
-- **mechanicLongestRoadState / mechanicLargestArmyState**: In diffs, keyed by color string
+- **mechanicLongestRoadState / mechanicLargestArmyState**: In diffs, keyed by color string. `hasLongestRoad`/`hasLargestArmy` can be `true` (gained) or `false` (lost)
 
 ### Cross-Context Communication
 
@@ -54,9 +54,9 @@ Game state flows: content script → `chrome.storage.local` → popup. The popup
 ## Known Issues / Gotchas
 
 - Bot sessions lack `username` — parser assigns `Bot N` to preserve color indexing
-- Sessions array index = playerColor - 1. If a session entry is null/skipped, color mapping breaks
 - Settlements default to 0; all placements (including setup) come through as diff events
 - The `playerColorToName` map is module-level state — survives across messages but resets on page reload
+- All hooks in `SubmitGameView` must be above the early return to avoid React hooks violation (#310)
 
 ## API
 

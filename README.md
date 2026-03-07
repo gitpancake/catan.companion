@@ -47,7 +47,7 @@ src/
    - `type:91` diff messages contain `gameLogState` entries with game events
    - `text.type:4` = setup placement, `text.type:5` = mid-game build, `text.type:10` = dice roll
 
-3. **`state.ts`** applies parsed events to a cumulative `GameState` (settlements, cities, VP cards, dice history).
+3. **`state.ts`** applies parsed events to a cumulative `GameState` (settlements, cities, VP cards, dice history, longest road/largest army gains and losses).
 
 4. **`index.ts`** persists the game state to `chrome.storage.local` after every update, making it available to the popup.
 
