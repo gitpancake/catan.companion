@@ -34,19 +34,29 @@ export default function SubmitGameView({
 
   useEffect(() => {
     const t = token ?? undefined;
+
+    // Load game state independently so API failures don't discard it
+    getGameState().then(setGameState).catch(() => {});
+
     Promise.all([
-      getGameState(),
       fetchLeagues(t),
       fetchPlayers(t),
       getPlayerMappings(),
-    ]).then(([gs, ls, ps, pm]) => {
-      setGameState(gs);
-      // Only show leagues where user can submit (owner/co-owner)
+    ]).then(([ls, ps, pm]) => {
       setLeagues(ls.filter((l) => l.userRole === "owner" || l.userRole === "co-owner"));
       setPlayers(ps);
       setMappings(pm);
+    }).catch((err) => {
+      setError(err instanceof Error ? err.message : "Failed to load data");
     });
   }, [token]);
+
+  // Must be above the early return so hook count is stable across renders
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => onBack(), 3000);
+    return () => clearTimeout(timer);
+  }, [success, onBack]);
 
   if (!gameState || !gameState.started || gameState.players.length === 0) {
     return (
@@ -54,7 +64,11 @@ export default function SubmitGameView({
         <button onClick={onBack} className="text-xs text-muted-foreground hover:text-foreground">
           &larr; Back
         </button>
-        <p className="text-xs text-muted-foreground">No game data found. Play a game on colonist.io first.</p>
+        {error ? (
+          <p className="text-xs text-destructive">{error}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">No game data found. Play a game on colonist.io first.</p>
+        )}
       </div>
     );
   }
@@ -103,12 +117,6 @@ export default function SubmitGameView({
       setSubmitting(false);
     }
   };
-
-  useEffect(() => {
-    if (!success) return;
-    const timer = setTimeout(() => onBack(), 3000);
-    return () => clearTimeout(timer);
-  }, [success, onBack]);
 
   if (success) {
     return (
