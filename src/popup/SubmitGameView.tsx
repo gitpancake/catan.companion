@@ -104,16 +104,17 @@ export default function SubmitGameView({
     }
   };
 
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => onBack(), 3000);
+    return () => clearTimeout(timer);
+  }, [success, onBack]);
+
   if (success) {
     return (
-      <div className="p-4 space-y-3">
-        <p className="text-xs font-medium text-green-500">Game submitted!</p>
-        <button
-          onClick={onBack}
-          className="inline-flex h-8 w-full items-center justify-center rounded-md border border-border px-4 text-xs font-medium hover:bg-muted"
-        >
-          Done
-        </button>
+      <div className="flex flex-col items-center justify-center p-8 space-y-3">
+        <p className="text-sm font-medium text-green-500">Game submitted!</p>
+        <p className="text-[10px] text-muted-foreground">Returning to leagues...</p>
       </div>
     );
   }
