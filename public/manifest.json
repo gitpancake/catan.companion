@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Catan Companion",
+  "version": "0.1.0",
+  "description": "Track resources, dice rolls, and game stats on colonist.io",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://catan.henrypye.xyz/*"],
+  "action": {
+    "default_popup": "src/popup/index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.colonist.io/*"],
+      "js": ["content.js"],
+      "css": ["assets/overlay.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["interceptor.js"],
+      "matches": ["*://*.colonist.io/*"]
+    }
+  ]
+}
