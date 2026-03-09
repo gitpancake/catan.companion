@@ -1,11 +1,17 @@
 import { startObserver } from "./observer";
-import { parseWsMessage } from "./ws-parser";
+import { parseWsMessage, getDiscoveredPlayers, restoreColorMap } from "./ws-parser";
 import { createGameState, applyEvent } from "../tracker/state";
 import { createOverlay, updateOverlay } from "../overlay/index";
 import type { GameState } from "./types";
 
 // Inline serialization to avoid shared chunk (content scripts can't load chunks)
 function persistGameState(state: GameState) {
+  // Persist color map alongside game state so it survives page reloads
+  const colorMap: Record<string, string> = {};
+  for (const [color, name] of getDiscoveredPlayers()) {
+    colorMap[String(color)] = name;
+  }
+
   chrome.storage.local.set({
     catan_game_state: {
       players: Array.from(state.players.values()).map((p) => ({
@@ -18,7 +24,47 @@ function persistGameState(state: GameState) {
       largestArmyPlayer: state.largestArmyPlayer,
       started: state.started,
       savedAt: new Date().toISOString(),
+      colorMap,
     },
+  });
+}
+
+// Restore game state and color map from storage
+function restoreGameState(wsState: GameState): Promise<boolean> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get("catan_game_state", (result) => {
+      const saved = result.catan_game_state as {
+        started?: boolean;
+        players?: { name: string; settlements: number; cities: number; vpCards: number }[];
+        longestRoadPlayer?: string | null;
+        largestArmyPlayer?: string | null;
+        colorMap?: Record<string, string>;
+      } | undefined;
+      if (!saved || !saved.started || !Array.isArray(saved.players) || saved.players.length === 0) {
+        resolve(false);
+        return;
+      }
+
+      // Restore player state
+      for (const p of saved.players) {
+        wsState.players.set(p.name, {
+          name: p.name,
+          settlements: p.settlements ?? 0,
+          cities: p.cities ?? 0,
+          vpCards: p.vpCards ?? 0,
+        });
+      }
+      wsState.longestRoadPlayer = saved.longestRoadPlayer ?? null;
+      wsState.largestArmyPlayer = saved.largestArmyPlayer ?? null;
+      wsState.started = true;
+
+      // Restore color map
+      if (saved.colorMap && typeof saved.colorMap === "object") {
+        restoreColorMap(saved.colorMap);
+      }
+
+      resolve(true);
+    });
   });
 }
 
@@ -33,6 +79,14 @@ if (window.location.hostname.includes("colonist.io")) {
 
   // Shared game state — used by both WS parser and DOM observer
   const wsState = createGameState();
+
+  // Restore previous state (e.g. after page refresh mid-game)
+  restoreGameState(wsState).then((restored) => {
+    if (restored) {
+      createOverlay();
+      updateOverlay(wsState);
+    }
+  });
 
   // Listen for intercepted WebSocket messages (now msgpack-decoded)
   window.addEventListener("message", (event) => {
