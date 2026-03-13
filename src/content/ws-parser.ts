@@ -148,7 +148,7 @@ function syncPlayerStates(diff: Record<string, unknown>, state: GameState): bool
       for (const key of ["1", "upgradeVictoryPoints", "cityVictoryPoints"]) {
         if (typeof vpState[key] === "number") {
           const v = vpState[key] as number;
-          player.cities = v / 2;
+          player.cities = Math.round(v / 2);
           wrote = true;
           break;
         }

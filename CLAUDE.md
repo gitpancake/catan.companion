@@ -57,6 +57,7 @@ Game state flows: content script → `chrome.storage.local` → popup. The popup
 - Settlements default to 0; all placements (including setup) come through as diff events
 - The `playerColorToName` map is module-level state — survives across messages but resets on page reload
 - All hooks in `SubmitGameView` must be above the early return to avoid React hooks violation (#310)
+- City counts from `victoryPointsState` are stored as total VP (2 per city) — must `Math.round(v / 2)` to avoid fractional display when colonist.io sends odd values
 
 ## API
 
