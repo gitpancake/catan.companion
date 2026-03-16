@@ -9,11 +9,18 @@ import {
 import {
   getGameState,
   clearGameState,
-  calcVp,
   type SerializedGameState,
   type SerializedPlayer,
 } from "@/lib/gameState";
 import { getPlayerMappings, savePlayerMappings } from "@/lib/storage";
+
+interface PlayerOverride {
+  settlements: number;
+  cities: number;
+  vpCards: number;
+  longestRoad: boolean;
+  largestArmy: boolean;
+}
 
 export default function SubmitGameView({
   token,
@@ -31,6 +38,8 @@ export default function SubmitGameView({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [overrides, setOverrides] = useState<Record<string, PlayerOverride>>({});
 
   useEffect(() => {
     const t = token ?? undefined;
@@ -75,6 +84,26 @@ export default function SubmitGameView({
 
   const mappedPlayers = gameState.players.filter((p) => !skipped.has(p.name) && mappings[p.name]);
 
+  const getPlayerData = (player: SerializedPlayer) => {
+    const override = overrides[player.name];
+    if (!override) {
+      return {
+        settlements: player.settlements,
+        cities: player.cities,
+        vpCards: player.vpCards,
+        longestRoad: gameState.longestRoadPlayer === player.name,
+        largestArmy: gameState.largestArmyPlayer === player.name,
+      };
+    }
+    return override;
+  };
+
+  const calcPlayerVp = (player: SerializedPlayer) => {
+    const data = getPlayerData(player);
+    return data.settlements + data.cities * 2 + data.vpCards + 
+           (data.longestRoad ? 2 : 0) + (data.largestArmy ? 2 : 0);
+  };
+
   const handleSubmit = async () => {
     if (!selectedLeague) {
       setError("Select a league");
@@ -93,16 +122,19 @@ export default function SubmitGameView({
         {
           leagueId: selectedLeague,
           playedAt: gameState.savedAt,
-          scores: mappedPlayers.map((p) => ({
-            playerId: mappings[p.name],
-            victoryPoints: calcVp(p, gameState.longestRoadPlayer, gameState.largestArmyPlayer),
-            settlements: p.settlements,
-            cities: p.cities,
-            longestRoad: gameState.longestRoadPlayer === p.name,
-            largestArmy: gameState.largestArmyPlayer === p.name,
-            devPoints: 0,
-            devCardVp: p.vpCards,
-          })),
+          scores: mappedPlayers.map((p) => {
+            const data = getPlayerData(p);
+            return {
+              playerId: mappings[p.name],
+              victoryPoints: calcPlayerVp(p),
+              settlements: data.settlements,
+              cities: data.cities,
+              longestRoad: data.longestRoad,
+              largestArmy: data.largestArmy,
+              devPoints: 0,
+              devCardVp: data.vpCards,
+            };
+          }),
         },
         token ?? undefined,
       );
@@ -134,7 +166,19 @@ export default function SubmitGameView({
         <button onClick={onBack} className="text-xs text-muted-foreground hover:text-foreground">
           &larr; Back
         </button>
-        <h2 className="text-xs font-bold tracking-tight">Submit Game</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setEditMode(!editMode)}
+            className={`text-[10px] px-2 py-1 rounded border transition-colors ${
+              editMode 
+                ? "bg-primary text-primary-foreground border-primary" 
+                : "border-input bg-background text-muted-foreground hover:text-foreground hover:bg-accent"
+            }`}
+          >
+            {editMode ? "Done" : "Edit Scores"}
+          </button>
+          <h2 className="text-xs font-bold tracking-tight">Submit Game</h2>
+        </div>
       </div>
 
       {/* League Selection */}
@@ -169,6 +213,9 @@ export default function SubmitGameView({
             leaderboardPlayers={players}
             selectedPlayerId={mappings[p.name] ?? ""}
             isSkipped={skipped.has(p.name)}
+            editMode={editMode}
+            override={overrides[p.name]}
+            calculatedVp={calcPlayerVp(p)}
             onMap={(playerId) =>
               setMappings((prev) => ({ ...prev, [p.name]: playerId }))
             }
@@ -179,6 +226,9 @@ export default function SubmitGameView({
                 else next.add(p.name);
                 return next;
               })
+            }
+            onOverride={(override) =>
+              setOverrides((prev) => ({ ...prev, [p.name]: override }))
             }
           />
         ))}
@@ -205,20 +255,37 @@ function PlayerRow({
   leaderboardPlayers,
   selectedPlayerId,
   isSkipped,
+  editMode,
+  override,
+  calculatedVp,
   onMap,
   onToggleSkip,
+  onOverride,
 }: {
   player: SerializedPlayer;
   gameState: SerializedGameState;
   leaderboardPlayers: Player[];
   selectedPlayerId: string;
   isSkipped: boolean;
+  editMode: boolean;
+  override?: PlayerOverride;
+  calculatedVp: number;
   onMap: (playerId: string) => void;
   onToggleSkip: () => void;
+  onOverride: (override: PlayerOverride) => void;
 }) {
-  const vp = calcVp(player, gameState.longestRoadPlayer, gameState.largestArmyPlayer);
-  const hasLR = gameState.longestRoadPlayer === player.name;
-  const hasLA = gameState.largestArmyPlayer === player.name;
+  // Use override values or original values
+  const currentData = override || {
+    settlements: player.settlements,
+    cities: player.cities,
+    vpCards: player.vpCards,
+    longestRoad: gameState.longestRoadPlayer === player.name,
+    largestArmy: gameState.largestArmyPlayer === player.name,
+  };
+
+  const updateOverride = (updates: Partial<PlayerOverride>) => {
+    onOverride({ ...currentData, ...updates });
+  };
 
   return (
     <div className={`rounded-md border border-border p-2 space-y-1.5 ${isSkipped ? "opacity-40" : ""}`}>
@@ -226,15 +293,19 @@ function PlayerRow({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium">{player.name}</span>
-          <span className="text-[10px] text-muted-foreground">
-            {player.settlements}s {player.cities}c
-            {hasLR ? " LR" : ""}
-            {hasLA ? " LA" : ""}
-            {player.vpCards > 0 ? ` ${player.vpCards}vp` : ""}
-          </span>
+          {!editMode && (
+            <span className="text-[10px] text-muted-foreground">
+              {currentData.settlements}s {currentData.cities}c
+              {currentData.longestRoad ? " LR" : ""}
+              {currentData.largestArmy ? " LA" : ""}
+              {currentData.vpCards > 0 ? ` ${currentData.vpCards}vp` : ""}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold">{vp} VP</span>
+          <span className={`text-xs font-bold ${override ? "text-amber-500" : ""}`}>
+            {calculatedVp} VP
+          </span>
           <button
             onClick={onToggleSkip}
             className="text-[10px] text-muted-foreground hover:text-foreground"
@@ -243,6 +314,71 @@ function PlayerRow({
           </button>
         </div>
       </div>
+
+      {/* Edit mode controls */}
+      {editMode && !isSkipped && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-3 gap-1">
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground">Settlements</label>
+              <input
+                type="number"
+                min="0"
+                max="5"
+                value={currentData.settlements}
+                onChange={(e) => updateOverride({ settlements: parseInt(e.target.value) || 0 })}
+                className="flex h-6 w-full rounded border border-input bg-background px-1 text-[11px] text-center font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground">Cities</label>
+              <input
+                type="number"
+                min="0"
+                max="4"
+                value={currentData.cities}
+                onChange={(e) => updateOverride({ cities: parseInt(e.target.value) || 0 })}
+                className="flex h-6 w-full rounded border border-input bg-background px-1 text-[11px] text-center font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground">Dev VP</label>
+              <input
+                type="number"
+                min="0"
+                max="5"
+                value={currentData.vpCards}
+                onChange={(e) => updateOverride({ vpCards: parseInt(e.target.value) || 0 })}
+                className="flex h-6 w-full rounded border border-input bg-background px-1 text-[11px] text-center font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => updateOverride({ longestRoad: !currentData.longestRoad })}
+              className={`text-[10px] px-2 py-1 rounded border transition-colors ${
+                currentData.longestRoad
+                  ? "border-amber-500 bg-amber-50 text-amber-700"
+                  : "border-input bg-background text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              Longest Road
+            </button>
+            <button
+              type="button"
+              onClick={() => updateOverride({ largestArmy: !currentData.largestArmy })}
+              className={`text-[10px] px-2 py-1 rounded border transition-colors ${
+                currentData.largestArmy
+                  ? "border-amber-500 bg-amber-50 text-amber-700"
+                  : "border-input bg-background text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              Largest Army
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mapping dropdown */}
       {!isSkipped && (
