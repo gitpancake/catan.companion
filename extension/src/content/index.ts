@@ -1,14 +1,12 @@
+import { ColonistTracker } from "colonist-io-api";
 import { startObserver } from "./observer";
-import { parseWsMessage, getDiscoveredPlayers, restoreColorMap } from "./ws-parser";
-import { createGameState, applyEvent } from "../tracker/state";
 import { createOverlay, updateOverlay } from "../overlay/index";
-import type { GameState } from "./types";
 
 // Inline serialization to avoid shared chunk (content scripts can't load chunks)
-function persistGameState(state: GameState) {
-  // Persist color map alongside game state so it survives page reloads
+function persistGameState(tracker: ColonistTracker) {
+  const state = tracker.getState();
   const colorMap: Record<string, string> = {};
-  for (const [color, name] of getDiscoveredPlayers()) {
+  for (const [color, name] of tracker.getPlayerMappings()) {
     colorMap[String(color)] = name;
   }
 
@@ -30,7 +28,7 @@ function persistGameState(state: GameState) {
 }
 
 // Restore game state and color map from storage
-function restoreGameState(wsState: GameState): Promise<boolean> {
+function restoreTracker(tracker: ColonistTracker): Promise<boolean> {
   return new Promise((resolve) => {
     chrome.storage.local.get("catan_game_state", (result) => {
       const saved = result.catan_game_state as {
@@ -45,23 +43,11 @@ function restoreGameState(wsState: GameState): Promise<boolean> {
         return;
       }
 
-      // Restore player state
-      for (const p of saved.players) {
-        wsState.players.set(p.name, {
-          name: p.name,
-          settlements: p.settlements ?? 0,
-          cities: p.cities ?? 0,
-          vpCards: p.vpCards ?? 0,
-        });
-      }
-      wsState.longestRoadPlayer = saved.longestRoadPlayer ?? null;
-      wsState.largestArmyPlayer = saved.largestArmyPlayer ?? null;
-      wsState.started = true;
-
-      // Restore color map
-      if (saved.colorMap && typeof saved.colorMap === "object") {
-        restoreColorMap(saved.colorMap);
-      }
+      tracker.restore(saved.players, {
+        colorMap: saved.colorMap,
+        longestRoadPlayer: saved.longestRoadPlayer,
+        largestArmyPlayer: saved.largestArmyPlayer,
+      });
 
       resolve(true);
     });
@@ -77,14 +63,13 @@ if (window.location.hostname.includes("colonist.io")) {
   (document.head || document.documentElement).appendChild(script);
   script.onload = () => script.remove();
 
-  // Shared game state — used by both WS parser and DOM observer
-  const wsState = createGameState();
+  const tracker = new ColonistTracker();
 
   // Restore previous state (e.g. after page refresh mid-game)
-  restoreGameState(wsState).then((restored) => {
+  restoreTracker(tracker).then((restored) => {
     if (restored) {
       createOverlay();
-      updateOverlay(wsState);
+      updateOverlay(tracker.getState());
     }
   });
 
@@ -92,17 +77,14 @@ if (window.location.hostname.includes("colonist.io")) {
   window.addEventListener("message", (event) => {
     if (event.data?.source !== "catan-companion-ws") return;
 
-    // parseWsMessage now also tries to extract game state snapshots
-    const events = parseWsMessage(event.data.payload, wsState);
+    const events = tracker.processMessage(event.data.payload);
+    const state = tracker.getState();
 
     // Update overlay if we got events OR if snapshot populated players
-    if (events.length > 0 || wsState.players.size > 0) {
-      for (const gameEvent of events) {
-        applyEvent(wsState, gameEvent);
-      }
+    if (events.length > 0 || state.players.size > 0) {
       createOverlay();
-      updateOverlay(wsState);
-      persistGameState(wsState);
+      updateOverlay(state);
+      persistGameState(tracker);
     }
   });
 

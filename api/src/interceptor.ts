@@ -1,10 +1,12 @@
-// This script is injected into the page context (not content script context)
-// to intercept WebSocket messages from colonist.io's game server.
-// colonist.io uses msgpack-encoded binary messages over WebSocket.
-
 import { decode } from "@msgpack/msgpack";
 
-(function () {
+export interface InterceptorOptions {
+  source?: string;
+}
+
+export function installInterceptor(options?: InterceptorOptions): void {
+  const source = options?.source ?? "colonist-io-api";
+
   const OriginalWebSocket = window.WebSocket;
 
   const WsProxy = function (this: WebSocket, url: string | URL, protocols?: string | string[]) {
@@ -13,7 +15,7 @@ import { decode } from "@msgpack/msgpack";
       : new OriginalWebSocket(url);
 
     const urlStr = typeof url === "string" ? url : url.toString();
-    console.log("[catan-companion] WebSocket intercepted:", urlStr);
+    console.log(`[${source}] WebSocket intercepted:`, urlStr);
 
     ws.addEventListener("message", (event: MessageEvent) => {
       try {
@@ -27,7 +29,7 @@ import { decode } from "@msgpack/msgpack";
             try {
               const msg = decode(new Uint8Array(buffer));
               window.postMessage(
-                { source: "catan-companion-ws", payload: JSON.stringify(msg) },
+                { source, payload: JSON.stringify(msg) },
                 "*"
               );
             } catch {
@@ -43,7 +45,7 @@ import { decode } from "@msgpack/msgpack";
         if (decoded !== null) {
           const payload = typeof decoded === "string" ? decoded : JSON.stringify(decoded);
           window.postMessage(
-            { source: "catan-companion-ws", payload },
+            { source, payload },
             "*"
           );
         }
@@ -62,4 +64,4 @@ import { decode } from "@msgpack/msgpack";
   Object.defineProperty(WsProxy, "CLOSED", { value: 3 });
 
   window.WebSocket = WsProxy;
-})();
+}

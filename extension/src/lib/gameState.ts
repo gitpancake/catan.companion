@@ -1,4 +1,4 @@
-import type { GameState } from "../content/types";
+import type { GameState } from "colonist-io-api";
 
 export interface SerializedPlayer {
   name: string;

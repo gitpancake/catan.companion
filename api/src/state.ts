@@ -1,4 +1,4 @@
-import type { GameState, PlayerState, GameEvent } from "../content/types";
+import type { GameState, PlayerState, GameEvent } from "./types";
 
 function createPlayer(name: string): PlayerState {
   return {

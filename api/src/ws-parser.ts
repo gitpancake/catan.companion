@@ -9,8 +9,17 @@ import type { GameEvent, GameState } from "./types";
 //     11 = robber placed
 // - playerStates.{color}.victoryPointsState tracks VP by category
 
-// Maps playerColor (1-indexed) → username
-const playerColorToName = new Map<number, string>();
+export interface ParserContext {
+  colorToName: Map<number, string>;
+  snapshotLogged: boolean;
+}
+
+export function createParserContext(): ParserContext {
+  return {
+    colorToName: new Map(),
+    snapshotLogged: false,
+  };
+}
 
 // colonist.io uses color strings in sessions, but numeric IDs in game state
 const colorStringToNumber: Record<string, number> = {
@@ -33,12 +42,12 @@ function resolveColorNumber(s: Record<string, unknown>, index: number): number {
   return index + 1;
 }
 
-function getPlayerName(color: number): string {
-  return playerColorToName.get(color) ?? `Player ${color}`;
+function getPlayerName(color: number, ctx: ParserContext): string {
+  return ctx.colorToName.get(color) ?? `Player ${color}`;
 }
 
 // Extract player sessions from StateUpdated messages
-function tryParseSessionsSnapshot(data: unknown, state: GameState): boolean {
+function tryParseSessionsSnapshot(data: unknown, state: GameState, ctx: ParserContext): boolean {
   if (!data || typeof data !== "object") return false;
   const d = data as Record<string, unknown>;
 
@@ -61,11 +70,11 @@ function tryParseSessionsSnapshot(data: unknown, state: GameState): boolean {
       (s.isBot ? `Bot ${color}` : null);
     if (!username) continue;
 
-    const oldName = playerColorToName.get(color);
+    const oldName = ctx.colorToName.get(color);
     if (oldName === username) continue; // no change, skip
 
-    console.log(`[catan-companion] mapping color ${color} -> ${username}`);
-    playerColorToName.set(color, username);
+    console.log(`[colonist-io-api] mapping color ${color} -> ${username}`);
+    ctx.colorToName.set(color, username);
 
     // If we had a "Player N" entry with data, migrate it to the real name
     if (oldName && oldName !== username && state.players.has(oldName) && !state.players.has(username)) {
@@ -73,7 +82,7 @@ function tryParseSessionsSnapshot(data: unknown, state: GameState): boolean {
       state.players.delete(oldName);
       oldPlayer.name = username;
       state.players.set(username, oldPlayer);
-      console.log(`[catan-companion] migrated "${oldName}" -> "${username}"`);
+      console.log(`[colonist-io-api] migrated "${oldName}" -> "${username}"`);
     } else if (!state.players.has(username)) {
       state.players.set(username, {
         name: username,
@@ -84,7 +93,7 @@ function tryParseSessionsSnapshot(data: unknown, state: GameState): boolean {
     }
   }
 
-  if (playerColorToName.size > 0) {
+  if (ctx.colorToName.size > 0) {
     state.started = true;
     return true;
   }
@@ -110,7 +119,7 @@ function findSessionsArray(obj: Record<string, unknown>): unknown[] | null {
 }
 
 // Sync authoritative building/VP counts from playerStates in diffs
-function syncPlayerStates(diff: Record<string, unknown>, state: GameState): boolean {
+function syncPlayerStates(diff: Record<string, unknown>, state: GameState, ctx: ParserContext): boolean {
   const playerStates = diff.playerStates as Record<string, unknown> | undefined;
   if (!playerStates || typeof playerStates !== "object") return false;
 
@@ -122,7 +131,7 @@ function syncPlayerStates(diff: Record<string, unknown>, state: GameState): bool
     const color = parseInt(colorStr);
     if (isNaN(color)) continue;
 
-    const name = getPlayerName(color);
+    const name = getPlayerName(color, ctx);
 
     // Ensure player exists in state (even if still "Player N")
     if (!state.players.has(name)) {
@@ -169,7 +178,7 @@ function syncPlayerStates(diff: Record<string, unknown>, state: GameState): bool
 
 // Parse type:91 game state diffs for game events
 // When skipBuilds is true, playerStates already synced building counts
-function parseDiffEvents(diff: Record<string, unknown>, skipBuilds = false): GameEvent[] {
+function parseDiffEvents(diff: Record<string, unknown>, ctx: ParserContext, skipBuilds = false): GameEvent[] {
   const events: GameEvent[] = [];
 
   // Parse gameLogState entries
@@ -194,7 +203,7 @@ function parseDiffEvents(diff: Record<string, unknown>, skipBuilds = false): Gam
         if (d1 && d2) {
           events.push({
             type: "roll",
-            player: getPlayerName(playerColor),
+            player: getPlayerName(playerColor, ctx),
             value: d1 + d2,
           });
         }
@@ -207,13 +216,13 @@ function parseDiffEvents(diff: Record<string, unknown>, skipBuilds = false): Gam
         if (pieceEnum === 2) {
           events.push({
             type: "built",
-            player: getPlayerName(playerColor),
+            player: getPlayerName(playerColor, ctx),
             building: "settlement",
           });
         } else if (pieceEnum === 3) {
           events.push({
             type: "built",
-            player: getPlayerName(playerColor),
+            player: getPlayerName(playerColor, ctx),
             building: "city",
           });
         }
@@ -223,7 +232,7 @@ function parseDiffEvents(diff: Record<string, unknown>, skipBuilds = false): Gam
       if (!skipBuilds && logType === 23 && playerColor) {
         events.push({
           type: "vp_card",
-          player: getPlayerName(playerColor),
+          player: getPlayerName(playerColor, ctx),
         });
       }
     }
@@ -237,7 +246,7 @@ function parseDiffEvents(diff: Record<string, unknown>, skipBuilds = false): Gam
       if (v && typeof v === "object" && typeof v.hasLongestRoad === "boolean") {
         events.push({
           type: v.hasLongestRoad ? "longest_road" : "lost_longest_road",
-          player: getPlayerName(parseInt(colorStr)),
+          player: getPlayerName(parseInt(colorStr), ctx),
         });
       }
     }
@@ -251,7 +260,7 @@ function parseDiffEvents(diff: Record<string, unknown>, skipBuilds = false): Gam
       if (v && typeof v === "object" && typeof v.hasLargestArmy === "boolean") {
         events.push({
           type: v.hasLargestArmy ? "largest_army" : "lost_largest_army",
-          player: getPlayerName(parseInt(colorStr)),
+          player: getPlayerName(parseInt(colorStr), ctx),
         });
       }
     }
@@ -265,6 +274,7 @@ function parseDiffEvents(diff: Record<string, unknown>, skipBuilds = false): Gam
 function tryExtractNamesFromPlayerStates(
   playerStates: Record<string, unknown>,
   state: GameState,
+  ctx: ParserContext,
 ): void {
   for (const [colorStr, val] of Object.entries(playerStates)) {
     const ps = val as Record<string, unknown> | undefined;
@@ -272,7 +282,7 @@ function tryExtractNamesFromPlayerStates(
 
     const color = parseInt(colorStr);
     if (isNaN(color)) continue;
-    if (playerColorToName.has(color)) continue; // already mapped
+    if (ctx.colorToName.has(color)) continue; // already mapped
 
     // Try common name fields
     const name =
@@ -281,8 +291,8 @@ function tryExtractNamesFromPlayerStates(
       (typeof ps.playerName === "string" ? ps.playerName : null);
 
     if (name) {
-      console.log(`[catan-companion] extracted name from playerStates: color ${color} -> ${name}`);
-      playerColorToName.set(color, name);
+      console.log(`[colonist-io-api] extracted name from playerStates: color ${color} -> ${name}`);
+      ctx.colorToName.set(color, name);
       if (!state.players.has(name)) {
         state.players.set(name, { name, settlements: 0, cities: 0, vpCards: 0 });
       }
@@ -310,7 +320,7 @@ function deepFindSessions(obj: unknown, depth = 0): unknown[] | null {
            "playerName" in (item as Record<string, unknown>)),
       );
       if (hasUsername) {
-        console.log(`[catan-companion] found player array under key "${key}" at depth ${depth}`);
+        console.log(`[colonist-io-api] found player array under key "${key}" at depth ${depth}`);
         return arr;
       }
     }
@@ -328,7 +338,7 @@ function deepFindSessions(obj: unknown, depth = 0): unknown[] | null {
 
 // Try to parse a full game state snapshot (sent on connect/reconnect)
 // These contain playerStates, sessions, gameLogState etc. at the payload level
-function tryParseFullSnapshot(obj: Record<string, unknown>, state: GameState): boolean {
+function tryParseFullSnapshot(obj: Record<string, unknown>, state: GameState, ctx: ParserContext): boolean {
   // Look for playerStates at various nesting levels
   const payload = (obj.data as Record<string, unknown> | undefined)?.payload as Record<string, unknown> | undefined;
   const candidates = [
@@ -350,30 +360,31 @@ function tryParseFullSnapshot(obj: Record<string, unknown>, state: GameState): b
       const sessions = deepFindSessions(c) ?? deepFindSessions(obj) ?? deepFindSessions(payload);
       if (sessions) {
         // Wrap in an object so tryParseSessionsSnapshot can find it
-        tryParseSessionsSnapshot({ sessions }, state);
+        tryParseSessionsSnapshot({ sessions }, state, ctx);
       }
 
       // 2. If we still don't have names, try extracting from playerStates entries
-      if (playerColorToName.size === 0) {
+      if (ctx.colorToName.size === 0) {
         tryExtractNamesFromPlayerStates(
           c.playerStates as Record<string, unknown>,
           state,
+          ctx,
         );
       }
 
       // 3. If we STILL don't have names, log the playerStates keys for debugging
-      if (playerColorToName.size === 0) {
+      if (ctx.colorToName.size === 0) {
         const ps = c.playerStates as Record<string, unknown>;
         for (const [colorStr, val] of Object.entries(ps)) {
           const entry = val as Record<string, unknown> | undefined;
           if (entry && typeof entry === "object") {
-            console.log(`[catan-companion] playerStates[${colorStr}] keys:`, Object.keys(entry).join(","));
+            console.log(`[colonist-io-api] playerStates[${colorStr}] keys:`, Object.keys(entry).join(","));
           }
         }
       }
 
       // 4. Now sync VP state (names should be resolved by now)
-      syncPlayerStates(c as Record<string, unknown>, state);
+      syncPlayerStates(c as Record<string, unknown>, state, ctx);
 
       // Also try to parse LR/LA from the snapshot
       const lrState = c.mechanicLongestRoadState as Record<string, unknown> | undefined;
@@ -381,7 +392,7 @@ function tryParseFullSnapshot(obj: Record<string, unknown>, state: GameState): b
         for (const [colorStr, val] of Object.entries(lrState)) {
           const v = val as Record<string, unknown> | undefined;
           if (v && typeof v === "object" && typeof v.hasLongestRoad === "boolean") {
-            const name = getPlayerName(parseInt(colorStr));
+            const name = getPlayerName(parseInt(colorStr), ctx);
             if (v.hasLongestRoad) state.longestRoadPlayer = name;
             else if (state.longestRoadPlayer === name) state.longestRoadPlayer = null;
           }
@@ -392,7 +403,7 @@ function tryParseFullSnapshot(obj: Record<string, unknown>, state: GameState): b
         for (const [colorStr, val] of Object.entries(laState)) {
           const v = val as Record<string, unknown> | undefined;
           if (v && typeof v === "object" && typeof v.hasLargestArmy === "boolean") {
-            const name = getPlayerName(parseInt(colorStr));
+            const name = getPlayerName(parseInt(colorStr), ctx);
             if (v.hasLargestArmy) state.largestArmyPlayer = name;
             else if (state.largestArmyPlayer === name) state.largestArmyPlayer = null;
           }
@@ -405,9 +416,7 @@ function tryParseFullSnapshot(obj: Record<string, unknown>, state: GameState): b
   return false;
 }
 
-let snapshotLogged = false;
-
-export function parseWsMessage(raw: string, state?: GameState): GameEvent[] {
+export function parseWsMessage(raw: string, state: GameState, ctx: ParserContext): GameEvent[] {
   const events: GameEvent[] = [];
 
   try {
@@ -415,29 +424,25 @@ export function parseWsMessage(raw: string, state?: GameState): GameEvent[] {
     if (!msg || typeof msg !== "object") return events;
 
     // Log large messages (likely full state snapshots on connect)
-    if (!snapshotLogged && raw.length > 5000) {
-      console.log("[catan-companion] received game snapshot");
-      snapshotLogged = true;
+    if (!ctx.snapshotLogged && raw.length > 5000) {
+      console.log("[colonist-io-api] received game snapshot");
+      ctx.snapshotLogged = true;
     }
 
     // Try to extract player sessions from the message (shallow search first)
-    if (state) {
-      tryParseSessionsSnapshot(msg, state);
-    }
+    tryParseSessionsSnapshot(msg, state, ctx);
 
     // If no names found yet, do a deep search for sessions
-    if (state && playerColorToName.size === 0) {
+    if (ctx.colorToName.size === 0) {
       const deepSessions = deepFindSessions(msg);
       if (deepSessions) {
-        console.log("[catan-companion] found sessions via deep search");
-        tryParseSessionsSnapshot({ sessions: deepSessions }, state);
+        console.log("[colonist-io-api] found sessions via deep search");
+        tryParseSessionsSnapshot({ sessions: deepSessions }, state, ctx);
       }
     }
 
     // Try to parse full game state snapshot (on connect/reconnect)
-    if (state) {
-      tryParseFullSnapshot(msg as Record<string, unknown>, state);
-    }
+    tryParseFullSnapshot(msg as Record<string, unknown>, state, ctx);
 
     // Check for type:91 diff messages (nested in data)
     const data = msg.data as Record<string, unknown> | undefined;
@@ -451,17 +456,15 @@ export function parseWsMessage(raw: string, state?: GameState): GameEvent[] {
           if (diff && typeof diff === "object") {
             // If playerStates is present, use it as ground truth for
             // buildings/VP and skip incremental built events from this diff
-            const hasPlayerStates = state && syncPlayerStates(diff, state);
-            const diffEvents = parseDiffEvents(diff, hasPlayerStates ?? false);
+            const hasPlayerStates = syncPlayerStates(diff, state, ctx);
+            const diffEvents = parseDiffEvents(diff, ctx, hasPlayerStates);
             events.push(...diffEvents);
           }
         }
       }
 
       // Also try snapshot from nested data
-      if (state) {
-        tryParseSessionsSnapshot(data, state);
-      }
+      tryParseSessionsSnapshot(data, state, ctx);
     }
   } catch {
     // Ignore parse errors
@@ -470,12 +473,12 @@ export function parseWsMessage(raw: string, state?: GameState): GameEvent[] {
   return events;
 }
 
-export function getDiscoveredPlayers(): Map<number, string> {
-  return playerColorToName;
+export function getDiscoveredPlayers(ctx: ParserContext): ReadonlyMap<number, string> {
+  return ctx.colorToName;
 }
 
-export function restoreColorMap(map: Record<string, string>): void {
+export function restoreColorMap(map: Record<string, string>, ctx: ParserContext): void {
   for (const [colorStr, name] of Object.entries(map)) {
-    playerColorToName.set(parseInt(colorStr), name);
+    ctx.colorToName.set(parseInt(colorStr), name);
   }
 }

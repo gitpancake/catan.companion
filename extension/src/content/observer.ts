@@ -1,7 +1,5 @@
-import { parseLogEntry } from "./parser";
-import { createGameState, applyEvent } from "../tracker/state";
+import { parseLogEntry, createGameState, applyEvent, type GameState } from "colonist-io-api";
 import { createOverlay, updateOverlay } from "../overlay/index";
-import type { GameState } from "./types";
 
 let state: GameState = createGameState();
 const processedIndices = new Set<string>();

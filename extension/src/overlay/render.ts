@@ -1,4 +1,4 @@
-import type { GameState } from "../content/types";
+import type { GameState } from "colonist-io-api";
 
 export function renderOverlay(container: HTMLElement, state: GameState): void {
   const body = container.querySelector(".catan-companion-body");
