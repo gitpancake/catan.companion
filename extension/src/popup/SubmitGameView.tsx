@@ -52,9 +52,15 @@ export default function SubmitGameView({
       fetchPlayers(t),
       getPlayerMappings(),
     ]).then(([ls, ps, pm]) => {
-      setLeagues(ls.filter((l) => l.userRole === "owner" || l.userRole === "co-owner"));
+      const filteredLeagues = ls.filter((l) => l.userRole === "owner" || l.userRole === "co-owner");
+      setLeagues(filteredLeagues);
       setPlayers(ps);
       setMappings(pm);
+      
+      // Auto-select league if there's only one
+      if (filteredLeagues.length === 1) {
+        setSelectedLeague(filteredLeagues[0].id);
+      }
     }).catch((err) => {
       setError(err instanceof Error ? err.message : "Failed to load data");
     });
