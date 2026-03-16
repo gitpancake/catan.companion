@@ -27,7 +27,7 @@ export function getFirebaseAuth(): Auth {
     _auth = getAuth(getFirebaseApp());
     // Use localStorage persistence — works reliably in Chrome extension popups
     // (default indexedDB persistence can fail in extension contexts)
-    setPersistence(_auth, browserLocalPersistence);
+    setPersistence(_auth, browserLocalPersistence).catch(() => {});
   }
   return _auth;
 }

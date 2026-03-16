@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
-import { saveAuth, clearAuth, type StoredUser } from "@/lib/storage";
+import { saveAuth, clearAuth, getStoredUser, getStoredToken, type StoredUser } from "@/lib/storage";
 import LoginScreen from "./LoginScreen";
 import LeagueView from "./LeagueView";
 import SubmitGameView from "./SubmitGameView";
@@ -15,22 +15,42 @@ export default function App() {
   useEffect(() => {
     // Wait for Firebase auth to initialize — this fires once on load and on login/logout
     const unsubscribe = onAuthStateChanged(getFirebaseAuth(), async (fbUser) => {
-      if (fbUser) {
-        const token = await fbUser.getIdToken();
-        const storedUser: StoredUser = {
-          uid: fbUser.uid,
-          email: fbUser.email ?? "",
-          displayName: fbUser.displayName,
-          photoURL: fbUser.photoURL,
-        };
-        await saveAuth(token, storedUser);
-        setToken(token);
-        setUser(storedUser);
-        setStatus("unlocked");
-      } else {
-        // No Firebase session — can't get a valid token, so require login
-        await clearAuth();
-        setStatus("locked");
+      try {
+        if (fbUser) {
+          const token = await fbUser.getIdToken();
+          const storedUser: StoredUser = {
+            uid: fbUser.uid,
+            email: fbUser.email ?? "",
+            displayName: fbUser.displayName,
+            photoURL: fbUser.photoURL,
+          };
+          await saveAuth(token, storedUser);
+          setToken(token);
+          setUser(storedUser);
+          setStatus("unlocked");
+        } else {
+          // No Firebase session — can't get a valid token, so require login
+          await clearAuth();
+          setStatus("locked");
+        }
+      } catch {
+        // Token refresh failed (expired session, network error, etc.)
+        // Fall back to stored auth if available, otherwise require login
+        try {
+          const storedUser = await getStoredUser();
+          const storedToken = await getStoredToken();
+          if (storedUser && storedToken) {
+            setToken(storedToken);
+            setUser(storedUser);
+            setStatus("unlocked");
+          } else {
+            await clearAuth();
+            setStatus("locked");
+          }
+        } catch {
+          await clearAuth().catch(() => {});
+          setStatus("locked");
+        }
       }
     });
 
