@@ -10,7 +10,8 @@ let dragOffsetX = 0;
 let dragOffsetY = 0;
 
 export function createOverlay(): HTMLElement {
-  if (overlayEl) return overlayEl;
+  // Check if overlay exists AND is still connected to the DOM
+  if (overlayEl && document.contains(overlayEl)) return overlayEl;
 
   overlayEl = document.createElement("div");
   overlayEl.className = "catan-companion-overlay";
