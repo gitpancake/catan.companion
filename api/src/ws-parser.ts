@@ -392,27 +392,39 @@ function tryParseFullSnapshot(obj: Record<string, unknown>, state: GameState, ct
       // 4. Now sync VP state (names should be resolved by now)
       syncPlayerStates(c as Record<string, unknown>, state, ctx);
 
-      // Also try to parse LR/LA from the snapshot
-      const lrState = c.mechanicLongestRoadState as Record<string, unknown> | undefined;
-      if (lrState && typeof lrState === "object") {
-        for (const [colorStr, val] of Object.entries(lrState)) {
-          const v = val as Record<string, unknown> | undefined;
-          if (v && typeof v === "object" && typeof v.hasLongestRoad === "boolean") {
-            const name = getPlayerName(parseInt(colorStr), ctx);
-            if (v.hasLongestRoad) state.longestRoadPlayer = name;
-            else if (state.longestRoadPlayer === name) state.longestRoadPlayer = null;
+      // Search for LR/LA at ALL candidate levels — they may be nested
+      // differently than playerStates (e.g., playerStates in gameState
+      // but LR/LA at the payload level)
+      for (const lrCandidate of candidates) {
+        if (!lrCandidate || typeof lrCandidate !== "object") continue;
+        const lrc = lrCandidate as Record<string, unknown>;
+        const lrState = lrc.mechanicLongestRoadState as Record<string, unknown> | undefined;
+        if (lrState && typeof lrState === "object") {
+          for (const [colorStr, val] of Object.entries(lrState)) {
+            const v = val as Record<string, unknown> | undefined;
+            if (v && typeof v === "object" && typeof v.hasLongestRoad === "boolean") {
+              const name = getPlayerName(parseInt(colorStr), ctx);
+              if (v.hasLongestRoad) state.longestRoadPlayer = name;
+              else if (state.longestRoadPlayer === name) state.longestRoadPlayer = null;
+            }
           }
+          break;
         }
       }
-      const laState = c.mechanicLargestArmyState as Record<string, unknown> | undefined;
-      if (laState && typeof laState === "object") {
-        for (const [colorStr, val] of Object.entries(laState)) {
-          const v = val as Record<string, unknown> | undefined;
-          if (v && typeof v === "object" && typeof v.hasLargestArmy === "boolean") {
-            const name = getPlayerName(parseInt(colorStr), ctx);
-            if (v.hasLargestArmy) state.largestArmyPlayer = name;
-            else if (state.largestArmyPlayer === name) state.largestArmyPlayer = null;
+      for (const laCandidate of candidates) {
+        if (!laCandidate || typeof laCandidate !== "object") continue;
+        const lac = laCandidate as Record<string, unknown>;
+        const laState = lac.mechanicLargestArmyState as Record<string, unknown> | undefined;
+        if (laState && typeof laState === "object") {
+          for (const [colorStr, val] of Object.entries(laState)) {
+            const v = val as Record<string, unknown> | undefined;
+            if (v && typeof v === "object" && typeof v.hasLargestArmy === "boolean") {
+              const name = getPlayerName(parseInt(colorStr), ctx);
+              if (v.hasLargestArmy) state.largestArmyPlayer = name;
+              else if (state.largestArmyPlayer === name) state.largestArmyPlayer = null;
+            }
           }
+          break;
         }
       }
 

@@ -63,9 +63,12 @@ export class ColonistTracker {
       return true;
     }
 
-    // VP decreased — VP never goes down in a single Catan game
+    // VP dropped significantly — VP never goes down in a single Catan game,
+    // but small drops (1-3) can happen when a reconnect snapshot corrects
+    // temporarily inflated counts from unsync'd build events.
+    // A real new game drops VP from ~20-30 to 0-8, so a threshold of 4 is safe.
     const currentTotalVP = this.getTotalVP();
-    if (prevTotalVP > 0 && currentTotalVP < prevTotalVP) {
+    if (prevTotalVP > 4 && currentTotalVP < prevTotalVP - 4) {
       return true;
     }
 
