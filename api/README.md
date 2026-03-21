@@ -80,9 +80,10 @@ High-level class that combines parsing and state management.
 
 | Method | Description |
 |--------|-------------|
-| `processMessage(raw: string)` | Parse a JSON message string, apply events, return `GameEvent[]` |
+| `processMessage(raw: string)` | Parse a JSON message string, apply events, return `GameEvent[]`. Auto-detects new games and resets state. |
 | `getState()` | Get current `GameState` (readonly) |
 | `getPlayerMappings()` | Get color-to-name mapping `ReadonlyMap<number, string>` |
+| `didReset` | `boolean` — whether the last `processMessage` call triggered an automatic reset (new game detected) |
 | `restore(players, opts?)` | Restore state from serialized data |
 | `reset()` | Reset to empty state |
 

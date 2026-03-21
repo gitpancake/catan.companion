@@ -65,12 +65,19 @@ popup context
 
 Firebase Auth (project `henry-auth-bcd1d`, shared with leaderboard). Popup uses email/password login with `browserLocalPersistence`. Token sent as `Authorization: Bearer` header to leaderboard API.
 
+### Overlay Features
+
+- **Reset button** (↺): Manually clears game state and Chrome storage via `setOnReset()` callback wired in `content/index.ts`
+- **Auto-reset**: `ColonistTracker.processMessage()` detects new games when all players change or total VP drops significantly (threshold of 4 to avoid false triggers on reconnect)
+- **Collapse/expand** toggle and draggable header
+
 ## Known Issues / Gotchas
 
 - All hooks in `SubmitGameView` must be above the early return to avoid React hooks violation
 - The `persistGameState()` function in `content/index.ts` serializes inline (no shared chunk imports)
 - Popup reads from `chrome.storage.local` — never communicates directly with content script
 - The `@/` path alias maps to `./src/` (configured in both tsconfig.json and vite.config.ts)
+- Overlay header drag ignores clicks on buttons (reset/toggle) to prevent accidental drags
 
 ## Environment Variables
 

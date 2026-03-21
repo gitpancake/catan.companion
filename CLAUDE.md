@@ -38,3 +38,5 @@ cd extension && npm run dev
 - Changes to api exports must stay compatible with extension imports
 - The extension's `content/interceptor.ts` uses `installInterceptor({ source: "catan-companion-ws" })` — the content script listens for this specific source
 - The api's `ColonistTracker` replaces the old module-level state pattern — parser context is now per-instance
+- `ColonistTracker.processMessage()` auto-detects new games (VP drop or all-new players) and resets — check `didReset` if you need to react to this
+- The overlay exposes a manual reset button via `setOnReset()` callback

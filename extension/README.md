@@ -5,6 +5,7 @@ Chrome extension that tracks your Settlers of Catan games on [colonist.io](https
 ## Features
 
 - Real-time game overlay showing player settlements, cities, VP, and dice histogram
+- Manual reset button and automatic new-game detection (resets state when players change or VP drops)
 - WebSocket interception with automatic msgpack decoding
 - DOM observer fallback for compatibility
 - Firebase authentication
