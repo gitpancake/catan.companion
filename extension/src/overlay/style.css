@@ -30,7 +30,14 @@
   letter-spacing: -0.02em;
 }
 
-.catan-companion-toggle {
+.catan-companion-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.catan-companion-toggle,
+.catan-companion-reset {
   background: none;
   border: none;
   color: #a1a1aa;
@@ -39,7 +46,8 @@
   padding: 0 4px;
 }
 
-.catan-companion-toggle:hover {
+.catan-companion-toggle:hover,
+.catan-companion-reset:hover {
   color: #fafafa;
 }
 

@@ -3,11 +3,16 @@ import { renderOverlay } from "./render";
 
 let overlayEl: HTMLElement | null = null;
 let collapsed = false;
+let resetCallback: (() => void) | null = null;
 
 // Drag state
 let isDragging = false;
 let dragOffsetX = 0;
 let dragOffsetY = 0;
+
+export function setOnReset(cb: () => void): void {
+  resetCallback = cb;
+}
 
 export function createOverlay(): HTMLElement {
   // Check if overlay exists AND is still connected to the DOM
@@ -15,34 +20,58 @@ export function createOverlay(): HTMLElement {
 
   overlayEl = document.createElement("div");
   overlayEl.className = "catan-companion-overlay";
-  overlayEl.innerHTML = `
-    <div class="catan-companion-header">
-      <span>catan.</span>
-      <button class="catan-companion-toggle">−</button>
-    </div>
-    <div class="catan-companion-body">
-      <p style="color:#71717a;text-align:center;padding:8px 0;">Waiting for game data...</p>
-    </div>
-  `;
 
-  // Toggle collapse
-  const toggle = overlayEl.querySelector(".catan-companion-toggle")!;
-  const body = overlayEl.querySelector(".catan-companion-body")!;
+  // Build header
+  const header = document.createElement("div");
+  header.className = "catan-companion-header";
+
+  const title = document.createElement("span");
+  title.textContent = "catan.";
+  header.appendChild(title);
+
+  const actions = document.createElement("div");
+  actions.className = "catan-companion-header-actions";
+
+  const resetBtn = document.createElement("button");
+  resetBtn.className = "catan-companion-reset";
+  resetBtn.title = "Reset scores";
+  resetBtn.textContent = "\u21BA"; // ↺
+  resetBtn.addEventListener("click", () => {
+    if (resetCallback) resetCallback();
+  });
+  actions.appendChild(resetBtn);
+
+  const toggle = document.createElement("button");
+  toggle.className = "catan-companion-toggle";
+  toggle.textContent = "\u2212"; // −
+
+  const body = document.createElement("div");
+  body.className = "catan-companion-body";
+
+  const waiting = document.createElement("p");
+  waiting.style.cssText = "color:#71717a;text-align:center;padding:8px 0;";
+  waiting.textContent = "Waiting for game data...";
+  body.appendChild(waiting);
+
   toggle.addEventListener("click", () => {
     collapsed = !collapsed;
     body.classList.toggle("collapsed", collapsed);
-    toggle.textContent = collapsed ? "+" : "−";
+    toggle.textContent = collapsed ? "+" : "\u2212";
   });
+  actions.appendChild(toggle);
+  header.appendChild(actions);
+
+  overlayEl.appendChild(header);
+  overlayEl.appendChild(body);
 
   // Drag functionality
-  const header = overlayEl.querySelector(".catan-companion-header")!;
   header.addEventListener("mousedown", (e) => {
-    const evt = e as MouseEvent;
+    if ((e.target as HTMLElement).tagName === "BUTTON") return;
     isDragging = true;
     const rect = overlayEl!.getBoundingClientRect();
-    dragOffsetX = evt.clientX - rect.left;
-    dragOffsetY = evt.clientY - rect.top;
-    evt.preventDefault();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+    e.preventDefault();
   });
 
   document.addEventListener("mousemove", (e) => {

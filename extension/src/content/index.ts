@@ -1,6 +1,6 @@
 import { ColonistTracker } from "colonist-io-api";
 import { startObserver } from "./observer";
-import { createOverlay, updateOverlay } from "../overlay/index";
+import { createOverlay, updateOverlay, setOnReset } from "../overlay/index";
 
 // Inline serialization to avoid shared chunk (content scripts can't load chunks)
 function persistGameState(tracker: ColonistTracker) {
@@ -64,6 +64,13 @@ if (window.location.hostname.includes("colonist.io")) {
   script.onload = () => script.remove();
 
   const tracker = new ColonistTracker();
+
+  // Wire up manual reset button
+  setOnReset(() => {
+    tracker.reset();
+    chrome.storage.local.remove("catan_game_state");
+    updateOverlay(tracker.getState());
+  });
 
   // Restore previous state (e.g. after page refresh mid-game)
   restoreTracker(tracker).then((restored) => {
