@@ -49,10 +49,10 @@ WebSocket messages are msgpack-encoded binary frames.
   - `10` — Dice roll (`firstDice`, `secondDice`, `playerColor`)
   - `23` — VP card reveal
   - `45` — Game winner
-- `playerStates.{color}.victoryPointsState` — Authoritative VP counts:
-  - Key `"0"` = settlement VP
-  - Key `"1"` = city VP (total VP, divide by 2 for count)
-  - Key `"2"` = dev card VP
+- `playerStates.{color}.victoryPointsState` — Authoritative counts (not VP totals):
+  - Key `"0"` = settlement count
+  - Key `"1"` = city count
+  - Key `"2"` = VP dev card count
 - `mechanicLongestRoadState.{color}.hasLongestRoad` — boolean
 - `mechanicLargestArmyState.{color}.hasLargestArmy` — boolean
 
@@ -61,6 +61,6 @@ WebSocket messages are msgpack-encoded binary frames.
 ## Gotchas
 
 - Bot sessions lack `username` — parser assigns `Bot N` to preserve color indexing
-- City VP from `victoryPointsState` is stored as total VP (2 per city) — divide by 2
+- `victoryPointsState` stores counts directly (settlement count, city count, VP card count) — do NOT divide city value by 2
 - `deepFindSessions()` searches up to depth 4 and validates entries have username-like fields
 - Color string-to-number mapping: red=1, blue=2, orange=3, white=4, green=5, brown=6

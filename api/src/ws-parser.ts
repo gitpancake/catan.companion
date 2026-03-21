@@ -123,7 +123,7 @@ function syncPlayerStates(diff: Record<string, unknown>, state: GameState, ctx: 
   const playerStates = diff.playerStates as Record<string, unknown> | undefined;
   if (!playerStates || typeof playerStates !== "object") return false;
 
-  let hasChanges = false;
+  let foundVpState = false;
   for (const [colorStr, val] of Object.entries(playerStates)) {
     const ps = val as Record<string, unknown> | undefined;
     if (!ps || typeof ps !== "object") continue;
@@ -139,47 +139,32 @@ function syncPlayerStates(diff: Record<string, unknown>, state: GameState, ctx: 
     }
     const player = state.players.get(name)!;
 
-    // Store previous values to detect changes
-    const prevSettlements = player.settlements;
-    const prevCities = player.cities;
-    const prevVpCards = player.vpCards;
-
-    // Try to read victoryPointsState for authoritative counts
-    // colonist.io uses numeric keys: 0=settlement VP, 1=city VP, 2=dev card VP
+    // victoryPointsState stores counts directly:
+    //   key "0" = settlement count, key "1" = city count, key "2" = VP card count
     const vpState = ps.victoryPointsState as Record<string, unknown> | undefined;
     if (vpState && typeof vpState === "object") {
-      // Settlement VP: key "0" or named alternatives
+      foundVpState = true;
       for (const key of ["0", "addressVictoryPoints", "settlementVictoryPoints"]) {
         if (typeof vpState[key] === "number") {
           player.settlements = vpState[key] as number;
           break;
         }
       }
-      // City VP: key "1" or named alternatives (each city = 2 VP, so count = value / 2)
       for (const key of ["1", "upgradeVictoryPoints", "cityVictoryPoints"]) {
         if (typeof vpState[key] === "number") {
-          const v = vpState[key] as number;
-          player.cities = Math.round(v / 2);
+          player.cities = vpState[key] as number;
           break;
         }
       }
-      // VP cards: key "2" or named alternatives
       for (const key of ["2", "victoryPointDevelopmentCards", "developmentCardVictoryPoints"]) {
         if (typeof vpState[key] === "number") {
           player.vpCards = vpState[key] as number;
           break;
         }
       }
-
-      // Only consider this as having changes if any values actually changed
-      if (player.settlements !== prevSettlements || 
-          player.cities !== prevCities || 
-          player.vpCards !== prevVpCards) {
-        hasChanges = true;
-      }
     }
   }
-  return hasChanges;
+  return foundVpState;
 }
 
 // Parse type:91 game state diffs for game events
