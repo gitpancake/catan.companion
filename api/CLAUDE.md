@@ -64,3 +64,4 @@ WebSocket messages are msgpack-encoded binary frames.
 - `victoryPointsState` stores counts directly (settlement count, city count, VP card count) — do NOT divide city value by 2
 - `deepFindSessions()` searches up to depth 4 and validates entries have username-like fields
 - Color string-to-number mapping: red=1, blue=2, orange=3, white=4, green=5, brown=6
+- `syncPlayerStates` returns `{ hasBuildings, hasVpCards }` — skip flags are granular per category. Type 4/5 build events are skipped only when building counts were synced; type 23 VP card events are skipped only when VP card counts (key `"2"`) were present. This prevents silent data loss when a diff contains `playerStates` for buildings but VP reveals only appear as game log events (e.g. at game end).
