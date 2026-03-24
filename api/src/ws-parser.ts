@@ -119,11 +119,18 @@ function findSessionsArray(obj: Record<string, unknown>): unknown[] | null {
 }
 
 // Sync authoritative building/VP counts from playerStates in diffs
-function syncPlayerStates(diff: Record<string, unknown>, state: GameState, ctx: ParserContext): boolean {
+function syncPlayerStates(
+  diff: Record<string, unknown>,
+  state: GameState,
+  ctx: ParserContext,
+): { hasBuildings: boolean; hasVpCards: boolean } {
   const playerStates = diff.playerStates as Record<string, unknown> | undefined;
-  if (!playerStates || typeof playerStates !== "object") return false;
+  if (!playerStates || typeof playerStates !== "object") {
+    return { hasBuildings: false, hasVpCards: false };
+  }
 
-  let foundVpState = false;
+  let hasBuildings = false;
+  let hasVpCards = false;
   for (const [colorStr, val] of Object.entries(playerStates)) {
     const ps = val as Record<string, unknown> | undefined;
     if (!ps || typeof ps !== "object") continue;
@@ -143,33 +150,40 @@ function syncPlayerStates(diff: Record<string, unknown>, state: GameState, ctx: 
     //   key "0" = settlement count, key "1" = city count, key "2" = VP card count
     const vpState = ps.victoryPointsState as Record<string, unknown> | undefined;
     if (vpState && typeof vpState === "object") {
-      foundVpState = true;
       for (const key of ["0", "addressVictoryPoints", "settlementVictoryPoints"]) {
         if (typeof vpState[key] === "number") {
           player.settlements = vpState[key] as number;
+          hasBuildings = true;
           break;
         }
       }
       for (const key of ["1", "upgradeVictoryPoints", "cityVictoryPoints"]) {
         if (typeof vpState[key] === "number") {
           player.cities = vpState[key] as number;
+          hasBuildings = true;
           break;
         }
       }
       for (const key of ["2", "victoryPointDevelopmentCards", "developmentCardVictoryPoints"]) {
         if (typeof vpState[key] === "number") {
           player.vpCards = vpState[key] as number;
+          hasVpCards = true;
           break;
         }
       }
     }
   }
-  return foundVpState;
+  return { hasBuildings, hasVpCards };
 }
 
 // Parse type:91 game state diffs for game events
-// When skipBuilds is true, playerStates already synced building counts
-function parseDiffEvents(diff: Record<string, unknown>, ctx: ParserContext, skipBuilds = false): GameEvent[] {
+// skipBuilds: playerStates already synced building counts (settlements/cities)
+// skipVpCards: playerStates already synced VP dev card counts
+function parseDiffEvents(
+  diff: Record<string, unknown>,
+  ctx: ParserContext,
+  opts: { skipBuilds: boolean; skipVpCards: boolean } = { skipBuilds: false, skipVpCards: false },
+): GameEvent[] {
   const events: GameEvent[] = [];
 
   // Parse gameLogState entries
@@ -202,7 +216,7 @@ function parseDiffEvents(diff: Record<string, unknown>, ctx: ParserContext, skip
 
       // Piece placed: type 4 (setup) or type 5 (mid-game build)
       // Skip if playerStates already synced authoritative counts
-      if (!skipBuilds && (logType === 4 || logType === 5) && playerColor) {
+      if (!opts.skipBuilds && (logType === 4 || logType === 5) && playerColor) {
         const pieceEnum = text.pieceEnum as number | undefined;
         if (pieceEnum === 2) {
           events.push({
@@ -220,11 +234,15 @@ function parseDiffEvents(diff: Record<string, unknown>, ctx: ParserContext, skip
       }
 
       // VP card: type 23 (dev card VP reveal)
-      if (!skipBuilds && logType === 23 && playerColor) {
-        events.push({
-          type: "vp_card",
-          player: getPlayerName(playerColor, ctx),
-        });
+      // Only skip if victoryPointsState["2"] was present in this diff
+      if (logType === 23 && playerColor) {
+        console.log(`[colonist-io-api] VP card revealed for color ${playerColor}`);
+        if (!opts.skipVpCards) {
+          events.push({
+            type: "vp_card",
+            player: getPlayerName(playerColor, ctx),
+          });
+        }
       }
     }
   }
@@ -457,10 +475,13 @@ export function parseWsMessage(raw: string, state: GameState, ctx: ParserContext
         if (payload && typeof payload === "object") {
           const diff = payload.diff as Record<string, unknown> | undefined;
           if (diff && typeof diff === "object") {
-            // If playerStates is present, use it as ground truth for
-            // buildings/VP and skip incremental built events from this diff
-            const hasPlayerStates = syncPlayerStates(diff, state, ctx);
-            const diffEvents = parseDiffEvents(diff, ctx, hasPlayerStates);
+            // If playerStates is present, use it as ground truth —
+            // skip incremental events only for categories actually synced
+            const synced = syncPlayerStates(diff, state, ctx);
+            const diffEvents = parseDiffEvents(diff, ctx, {
+              skipBuilds: synced.hasBuildings,
+              skipVpCards: synced.hasVpCards,
+            });
             events.push(...diffEvents);
           }
         }
